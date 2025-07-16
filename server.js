@@ -257,7 +257,7 @@ async function handleStaticMessage(req, option) {
         responseMessage = `*📚 Welcome to Central Library, Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\n🌏 Please explore our Subject Catalouge :\n\n https://ysmcentallibrary.infinityfreeapp.com/catalouge/book.php`;
         break;
       case "5":
-        responseMessage = `*📚 Welcome to Central Library, Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\n🌏 Please click the link to update Mobile Number :\n\n https://library.ysmranchi.net/update/update_number.php`;
+        responseMessage = `*📚 Welcome to Central Library, Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\n🌏 Please click the link to update Mobile Number :\n\n https://library.ysmranchi.net/update/index.php`;
         break;
       case "6":
         responseMessage = `📚 Welcome to Central Library, Yogoda Satsanga Mahavidyalaya!
