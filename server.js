@@ -8,7 +8,8 @@ app.use(express.json());
 
 const { WEBHOOK_VERIFY_TOKEN, GRAPH_API_TOKEN, PORT} = process.env;
 // Replace the placeholder with your actual OpenAI API key
-const OPENAI_API_KEY = "sk-proj-UEg9n7o8lvSz4TT4guMsT3BlbkFJVm3EmTdxmr6v9ZnCq7cx";
+const { OPENAI_API_KEY } = process.env;
+
 
 let receivedData = {
   message: "",
