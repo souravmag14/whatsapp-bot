@@ -135,7 +135,7 @@ messageBody += `\n 🚨 Reply with *exit* to return to the main menu`;
             messaging_product: "whatsapp",
             to: message.from,
             text: {
-              body: `*📖 Welcome to Central Library, Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\n *No check-out* history found in your Name.\n\n 📚Please visit Central Library, YSM with ID card to Issue Book.\n\n *OR* 🍃Your WhatsApp number is not updated in our Library. To check/update your WhatsApp number\n\n 🌏 Please click the link:\n\n https://ysmcentallibrary.infinityfreeapp.com/whatsapp/update_number.php \n\n🍃 "The only thing that you absolutely have to know, is the location of the library.🍃" --Albert Einstein`,
+              body: `*📖 Welcome to Central Library, Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\n *No check-out* history found in your Name.\n\n 📚Please visit Central Library, YSM with ID card to Issue Book.\n\n *OR* 🍃Your WhatsApp number is not updated in our Library. To check/update your WhatsApp number\n\n 🌏 Please click the link:\n\n https://library.ysmranchi.net/update \n\n🍃 "The only thing that you absolutely have to know, is the location of the library.🍃" --Albert Einstein`,
             },
             context: {
               message_id: message.id,
@@ -248,13 +248,13 @@ async function handleStaticMessage(req, option) {
     let responseMessage;
     switch (option) {
       case "2":
-        responseMessage = `*📚 Welcome to Central Library,Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\n🌏 Please explore our Institutional Repository:\n\n https://ysmranchi-opac.kohacloud.in/pages.pl?p=dspace`;
+        responseMessage = `*📚 Welcome to Central Library,Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\n🌏 Please explore our Institutional Repository:\n\n https://library.ysmranchi.net/dspace`;
         break;
       case "3":
         responseMessage = `*📚 Welcome to Central Library, Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\n🌏 Please explore our Newspaper Archive :\n\n https://ysmcentallibrary.infinityfreeapp.com/result.php`;
         break;
       case "4":
-        responseMessage = `*📚 Welcome to Central Library, Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\n🌏 Please explore our Subject Catalouge :\n\n https://ysmcentallibrary.infinityfreeapp.com/catalouge/book.php`;
+        responseMessage = `*📚 Welcome to Central Library, Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\n🌏 Please explore our Subject Catalouge :\n\n https://library.ysmranchi.net/catalouge/book.php`;
         break;
       case "5":
         responseMessage = `*📚 Welcome to Central Library, Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\n🌏 Please click the link to update Mobile Number :\n\n https://library.ysmranchi.net/update/index.php`;
