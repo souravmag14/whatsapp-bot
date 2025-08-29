@@ -39,7 +39,7 @@ async function sendInitialMessage(req) {
         messaging_product: "whatsapp",
         to: message.from,
         text: {
-          body: `*📚 Welcome to Central Library,Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\nIt is an auto-generated Message!\n\n🌏 Please explore our website: https://library.ysmranchi.net \n\n🔍 For OPAC search, please visit: https://ysmranchi-opac.kohacloud.in.\n\n*Press 📝 1: for your Check out History*\n*Press 📝 2: for Library Repository*\n*Press 📝 3: for Newspaper Archive*\n*Press 📝 4: for Subject Catalogue*\n*Press 📝 5: Update Mobile Number*\n*Press 📝 6: Pragya: Your Knowledge Assistant*`,
+          body: `*📚 Welcome to Central Library,Yogoda Satsanga Mahavidyalaya!*\n\n*Dear ${senderName}*,\n\nIt is an auto-generated Message!\n\n🌏 Please explore our website: https://library.ysmranchi.net \n\n🔍 For OPAC search, please visit: https://ysmranchi-opac.kohacloud.in.\n\n*Press 📝 1: for Renew your Book*\n*Press 📝 2: for Library Repository*\n*Press 📝 3: for Newspaper Archive*\n*Press 📝 4: for Subject Catalogue*\n*Press 📝 5: Update Mobile Number*\n*Press 📝 6: Pragya: Your Knowledge Assistant*`,
         },
         context: {
           message_id: message.id,
