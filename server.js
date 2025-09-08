@@ -330,12 +330,61 @@ async function getChatGPTResponse(userMessage) {
 
 app.post("/webhook", async (req, res) => {
   const change = req.body.entry?.[0]?.changes[0]?.value;
-
-  // --- Handle incoming text messages ---
   const message = change?.messages?.[0];
+
+  // --- Log incoming text messages ---
   if (message?.type === "text") {
     console.log(`📨 Message received from ${message.from}: ${message.text.body}`);
-    // your existing message processing code...
+
+    // Update your receivedData
+    receivedData.message = message.text.body;
+    receivedData.senderPhoneNumber = change?.contacts?.[0]?.wa_id;
+    receivedData.senderName = change?.contacts?.[0]?.profile?.name;
+
+    const businessPhoneNumberId = change?.metadata?.phone_number_id;
+
+    try {
+      if (!initialMessageSent) {
+        await sendInitialMessage(req);
+      } else if (awaitingIssueId) {
+        await handleReplyOne(req);
+      } else if (awaitingUserQuestion) {
+        const userQuestion = message.text.body.trim();
+        if (userQuestion.toLowerCase() === 'exit') {
+          awaitingUserQuestion = false;
+          await sendInitialMessage(req);
+        } else {
+          const chatGPTResponse = await getChatGPTResponse(userQuestion);
+          await axios.post(`https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`, {
+            messaging_product: "whatsapp",
+            to: message.from,
+            text: { body: chatGPTResponse },
+            context: { message_id: message.id },
+          }, { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } });
+        }
+      } else {
+        const selectedOption = message.text.body.trim().toLowerCase();
+        if (selectedOption === "1") {
+          await handleReplyOne(req);
+        } else if (["2","3","4","5","6"].includes(selectedOption)) {
+          await handleStaticMessage(req, selectedOption);
+        } else if (!isNaN(selectedOption)) {
+          await handleReplyOne(req);
+        } else {
+          await sendInitialMessage(req);
+        }
+      }
+
+      // Mark message as read
+      await axios.post(`https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`, {
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: message.id,
+      }, { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } });
+
+    } catch (error) {
+      console.error("Error processing message:", error);
+    }
   }
 
   // --- Log incoming message statuses ---
@@ -348,60 +397,6 @@ app.post("/webhook", async (req, res) => {
 
   res.sendStatus(200);
 });
-
-
-app.post("/webhook", async (req, res) => {
-  const message = req.body.entry?.[0]?.changes[0]?.value?.messages?.[0];
-
-  if (message?.type === "text") {
-    receivedData.message = message.text.body;
-    receivedData.senderPhoneNumber = req.body.entry?.[0]?.changes[0]?.value?.contacts?.[0]?.wa_id;
-    receivedData.senderName = req.body.entry?.[0]?.changes[0]?.value?.contacts?.[0]?.profile?.name;
-
-    try {
-      const businessPhoneNumberId = req.body.entry?.[0]?.changes[0]?.value?.metadata?.phone_number_id;
-
-      if (!initialMessageSent) {
-        await sendInitialMessage(req);
-      } else if (awaitingIssueId) {
-        await handleReplyOne(req);
-      } else if (awaitingUserQuestion) {
-        const userQuestion = message.text.body.trim();
-        if (userQuestion.toLowerCase() === 'exit') {
-          awaitingUserQuestion = false;
-          await sendInitialMessage(req);
-        } else {
-          const chatGPTResponse = await getChatGPTResponse(userQuestion);
-          await axios({
-            method: "POST",
-            url: `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-            headers: {
-              Authorization: `Bearer ${GRAPH_API_TOKEN}`,
-            },
-            data: {
-              messaging_product: "whatsapp",
-              to: message.from,
-              text: {
-                body: chatGPTResponse,
-              },
-              context: {
-                message_id: message.id,
-              },
-            },
-          });
-        }
-      } else {
-        const selectedOption = message.text.body.trim().toLowerCase();
-        if (selectedOption === "1") {
-          await handleReplyOne(req);
-        } else if (["2", "3", "4", "5", "6"].includes(selectedOption)) {
-          await handleStaticMessage(req, selectedOption);
-        } else if (!isNaN(selectedOption)) {
-          await handleReplyOne(req);
-        } else {
-          await sendInitialMessage(req);
-        }
-      }
 
       await axios({
         method: "POST",
