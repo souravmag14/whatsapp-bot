@@ -328,6 +328,19 @@ async function getChatGPTResponse(userMessage) {
   }
 }
 
+// --- Log incoming message statuses ---
+app.post("/webhook-status", async (req, res) => {
+  const entryValue = req.body.entry?.[0]?.changes[0]?.value;
+  const statuses = entryValue?.statuses;
+
+  if (statuses && statuses.length > 0) {
+    statuses.forEach(status => {
+      console.log(`📦 Message Status -> ID: ${status.id}, To: ${status.recipient_id}, Status: ${status.status}, Timestamp: ${status.timestamp}`);
+    });
+  }
+
+  res.sendStatus(200);
+});
 
 
 app.post("/webhook", async (req, res) => {
