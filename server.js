@@ -6,11 +6,22 @@ import moment from "moment";
 const app = express();
 app.use(express.json());
 
-const { WEBHOOK_VERIFY_TOKEN, GRAPH_API_TOKEN, PORT, OPENAI_API_KEY } = process.env;
+const {
+  WEBHOOK_VERIFY_TOKEN,
+  GRAPH_API_TOKEN,
+  PORT,
+  OPENAI_API_KEY,
+  KOHA_USERNAME,
+  KOHA_PASSWORD
+} = process.env;
 
 // Track per-user state
 let userState = {}; // key = phoneNumber
 
+// Track message statuses
+let messageStatus = {}; // key = messageId
+
+// Get or initialize user state
 const getUserState = (phoneNumber) => {
   if (!userState[phoneNumber]) {
     userState[phoneNumber] = {
@@ -40,7 +51,10 @@ async function sendInitialMessage(change, state) {
         text: { body },
         context: { message_id: message.id },
       },
-      { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
+      { 
+        headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` },
+        httpsAgent: new https.Agent({ rejectUnauthorized: false })
+      }
     );
 
     state.initialMessageSent = true;
@@ -49,7 +63,7 @@ async function sendInitialMessage(change, state) {
   }
 }
 
-// Fetch checkout history
+// Fetch checkout history from Koha
 async function fetchCheckOutHistoryReport() {
   try {
     const agent = new https.Agent({ rejectUnauthorized: false });
@@ -57,9 +71,7 @@ async function fetchCheckOutHistoryReport() {
       'https://ysmranchi-opac.kohacloud.in/cgi-bin/koha/svc/report?id=94',
       { httpsAgent: agent }
     );
-
     if (response.status !== 200) throw new Error(response.statusText);
-
     return response.data;
   } catch (error) {
     console.error("Error fetching checkout report:", error.message);
@@ -67,7 +79,7 @@ async function fetchCheckOutHistoryReport() {
   }
 }
 
-// Handle option 1 (book renewal)
+// Handle book renewal (option 1)
 async function handleReplyOne(change, state) {
   try {
     const message = change.messages[0];
@@ -89,14 +101,14 @@ async function handleReplyOne(change, state) {
           const barcode = record[8] || 'Unknown';
           const issueId = record[10] || 'Unknown';
           const dueDays = moment(dueDate, "YYYY-MM-DD").diff(moment(), 'days');
-          body += `\n\📖 *${i+1}. ${bookTitle}*\n   *Author:* ${authorName}\n   *Due:* ${dueDate} (${dueDays} Days)\n   *Barcode:* ${barcode}\n   *Issue ID:* ${issueId}\n`;
+          body += `\n📖 *${i+1}. ${bookTitle}*\n   *Author:* ${authorName}\n   *Due:* ${dueDate} (${dueDays} Days)\n   *Barcode:* ${barcode}\n   *Issue ID:* ${issueId}\n`;
         });
         body += `\n🚨 Reply with *exit* to return to the main menu or serial number to renew.`;
 
         await axios.post(
           `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
           { messaging_product: "whatsapp", to: message.from, text: { body }, context: { message_id: message.id } },
-          { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
+          { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` }, httpsAgent: new https.Agent({ rejectUnauthorized: false }) }
         );
 
         state.awaitingIssueId = true;
@@ -109,43 +121,43 @@ async function handleReplyOne(change, state) {
             text: { body: `No check-out history found for ${senderName}. Please visit the library or update your WhatsApp number.` },
             context: { message_id: message.id }
           },
-          { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
+          { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` }, httpsAgent: new https.Agent({ rejectUnauthorized: false }) }
         );
       }
     } else {
       const userReply = message.text.body.trim();
       const index = parseInt(userReply) - 1;
+
       if (index >= 0 && index < state.booksCheckedOut.length) {
         const selectedBook = state.booksCheckedOut[index];
         const issueId = selectedBook[10] || 'Unknown';
         const bookTitle = selectedBook[5] || 'Unknown';
-        const barcode = selectedBook[8] || 'Unknown';
-
-        const domain = 'https://ysmranchi-staff.kohacloud.in';
-        const username = 'souravnag';
-        const password = '@Yss132989';
-        const url = `${domain}/api/v1/checkouts/${issueId}/renewals`;
+        const url = `https://ysmranchi-staff.kohacloud.in/api/v1/checkouts/${issueId}/renewals`;
 
         try {
           const response = await axios.post(url, {}, {
-            headers: { 'Authorization': 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64') },
+            headers: { 'Authorization': 'Basic ' + Buffer.from(`${KOHA_USERNAME}:${KOHA_PASSWORD}`).toString('base64') },
             httpsAgent: new https.Agent({ rejectUnauthorized: false })
           });
 
           const newDueDate = response.data.due_date;
           const successMessage = `Success! 🎉\n📚 "${bookTitle}" renewed.\nNew due: *${newDueDate}*\nType *exit* to return to menu.`;
 
-          await axios.post(
+          const sentMsg = await axios.post(
             `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
             { messaging_product: "whatsapp", to: message.from, text: { body: successMessage }, context: { message_id: message.id } },
-            { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
+            { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` }, httpsAgent: new https.Agent({ rejectUnauthorized: false }) }
           );
+
+          if (sentMsg.data?.messages?.[0]?.id) {
+            messageStatus[sentMsg.data.messages[0].id] = { status: "sent", to: message.from };
+          }
 
         } catch (error) {
           await axios.post(
             `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
             { messaging_product: "whatsapp", to: message.from, text: { body: `❌ Error: Maximum renewal reached. Return the book.` }, context: { message_id: message.id } },
-            { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
+            { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` }, httpsAgent: new https.Agent({ rejectUnauthorized: false }) }
           );
         }
 
@@ -153,7 +165,7 @@ async function handleReplyOne(change, state) {
         await axios.post(
           `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
           { messaging_product: "whatsapp", to: message.from, text: { body: `❌ Invalid serial number. Type *exit* to return.` }, context: { message_id: message.id } },
-          { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
+          { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` }, httpsAgent: new https.Agent({ rejectUnauthorized: false }) }
         );
       }
 
@@ -165,7 +177,7 @@ async function handleReplyOne(change, state) {
   }
 }
 
-// Handle static options 2-6
+// Handle static options 2–6
 async function handleStaticMessage(change, option, state) {
   const message = change.messages[0];
   const senderName = change.contacts[0].profile.name;
@@ -187,7 +199,7 @@ async function handleStaticMessage(change, option, state) {
     await axios.post(
       `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
       { messaging_product: "whatsapp", to: message.from, text: { body: responseMessage }, context: { message_id: message.id } },
-      { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
+      { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` }, httpsAgent: new https.Agent({ rejectUnauthorized: false }) }
     );
   } catch(e){
     console.error("Error handleStaticMessage:", e.response?.data || e.message);
@@ -211,18 +223,11 @@ async function getChatGPTResponse(userMessage){
   }
 }
 
-// Track per-user state
-let userState = {}; // key = phoneNumber
-
-// Optional: track message statuses globally
-let messageStatus = {}; // key = messageId
-
 // Webhook POST
 app.post("/webhook", async (req, res) => {
   const change = req.body.entry?.[0]?.changes[0]?.value;
   if (!change) return res.sendStatus(200);
 
-  // 1️⃣ Handle incoming messages
   const message = change.messages?.[0];
   if (message) {
     const senderPhoneNumber = change.contacts[0]?.wa_id;
@@ -244,12 +249,14 @@ app.post("/webhook", async (req, res) => {
           const sentMsg = await axios.post(
             `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
             { messaging_product: "whatsapp", to: message.from, text: { body: chatGPTResponse }, context: { message_id: message.id } },
-            { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
+            { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` }, httpsAgent: new https.Agent({ rejectUnauthorized: false }) }
           );
-          // Store message ID for tracking
-          messageStatus[sentMsg.data.messages[0].id] = { status: "sent", to: message.from };
+
+          if (sentMsg.data?.messages?.[0]?.id) {
+            messageStatus[sentMsg.data.messages[0].id] = { status: "sent", to: message.from };
+          }
         }
-      } else if (["2", "3", "4", "5", "6"].includes(message.text.body.trim())) {
+      } else if (["2","3","4","5","6"].includes(message.text.body.trim())) {
         await handleStaticMessage(change, message.text.body.trim(), state);
       } else {
         await sendInitialMessage(change, state);
@@ -260,7 +267,7 @@ app.post("/webhook", async (req, res) => {
       await axios.post(
         `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
         { messaging_product: "whatsapp", status: "read", message_id: message.id },
-        { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
+        { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` }, httpsAgent: new https.Agent({ rejectUnauthorized: false }) }
       );
 
     } catch (e) {
@@ -268,19 +275,17 @@ app.post("/webhook", async (req, res) => {
     }
   }
 
-  // 2️⃣ Handle message status updates (sent, delivered, read)
+  // Handle message status updates
   const statuses = change.statuses;
   if (statuses && statuses.length > 0) {
     statuses.forEach(status => {
       console.log(`📦 Message Status -> ID: ${status.id}, To: ${status.recipient_id}, Status: ${status.status}, Timestamp: ${status.timestamp}`);
-      // Update global messageStatus object
       messageStatus[status.id] = { to: status.recipient_id, status: status.status, timestamp: status.timestamp };
     });
   }
 
   res.sendStatus(200);
 });
-
 
 // Webhook GET verification
 app.get("/webhook", (req,res)=>{
@@ -294,6 +299,7 @@ app.get("/webhook", (req,res)=>{
   } else res.sendStatus(403);
 });
 
+// Simple homepage to check user state
 app.get("/", (req,res)=>{
   res.send(`<pre>Received Data:\n${JSON.stringify(userState,null,2)}</pre>`);
 });
