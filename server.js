@@ -211,56 +211,76 @@ async function getChatGPTResponse(userMessage){
   }
 }
 
+// Track per-user state
+let userState = {}; // key = phoneNumber
+
+// Optional: track message statuses globally
+let messageStatus = {}; // key = messageId
+
 // Webhook POST
-app.post("/webhook", async (req,res)=>{
+app.post("/webhook", async (req, res) => {
   const change = req.body.entry?.[0]?.changes[0]?.value;
-  if(!change) return res.sendStatus(200);
+  if (!change) return res.sendStatus(200);
 
+  // 1️⃣ Handle incoming messages
   const message = change.messages?.[0];
-  if(!message) return res.sendStatus(200);
+  if (message) {
+    const senderPhoneNumber = change.contacts[0]?.wa_id;
+    const state = getUserState(senderPhoneNumber);
 
-  const senderPhoneNumber = change.contacts[0]?.wa_id;
-  const state = getUserState(senderPhoneNumber);
-
-  try {
-    if(!state.initialMessageSent){
-      await sendInitialMessage(change, state);
-    } else if(state.awaitingIssueId || message.text.body.trim() === "1"){
-      await handleReplyOne(change, state);
-    } else if(state.awaitingUserQuestion){
-      const userQuestion = message.text.body.trim();
-      if(userQuestion.toLowerCase() === "exit"){
-        state.awaitingUserQuestion = false;
+    try {
+      if (!state.initialMessageSent) {
         await sendInitialMessage(change, state);
+      } else if (state.awaitingIssueId || message.text.body.trim() === "1") {
+        await handleReplyOne(change, state);
+      } else if (state.awaitingUserQuestion) {
+        const userQuestion = message.text.body.trim();
+        if (userQuestion.toLowerCase() === "exit") {
+          state.awaitingUserQuestion = false;
+          await sendInitialMessage(change, state);
+        } else {
+          const chatGPTResponse = await getChatGPTResponse(userQuestion);
+          const businessPhoneNumberId = change.metadata.phone_number_id;
+          const sentMsg = await axios.post(
+            `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
+            { messaging_product: "whatsapp", to: message.from, text: { body: chatGPTResponse }, context: { message_id: message.id } },
+            { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
+          );
+          // Store message ID for tracking
+          messageStatus[sentMsg.data.messages[0].id] = { status: "sent", to: message.from };
+        }
+      } else if (["2", "3", "4", "5", "6"].includes(message.text.body.trim())) {
+        await handleStaticMessage(change, message.text.body.trim(), state);
       } else {
-        const chatGPTResponse = await getChatGPTResponse(userQuestion);
-        const businessPhoneNumberId = change.metadata.phone_number_id;
-        await axios.post(
-          `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-          { messaging_product: "whatsapp", to: message.from, text: { body: chatGPTResponse }, context: { message_id: message.id } },
-          { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
-        );
+        await sendInitialMessage(change, state);
       }
-    } else if(["2","3","4","5","6"].includes(message.text.body.trim())){
-      await handleStaticMessage(change, message.text.body.trim(), state);
-    } else {
-      await sendInitialMessage(change, state);
+
+      // Mark as read
+      const businessPhoneNumberId = change.metadata.phone_number_id;
+      await axios.post(
+        `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
+        { messaging_product: "whatsapp", status: "read", message_id: message.id },
+        { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
+      );
+
+    } catch (e) {
+      console.error("Webhook processing error:", e.response?.data || e.message);
     }
+  }
 
-    // Mark as read
-    const businessPhoneNumberId = change.metadata.phone_number_id;
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-      { messaging_product: "whatsapp", status: "read", message_id: message.id },
-      { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
-    );
-
-  } catch(e){
-    console.error("Webhook processing error:", e.response?.data || e.message);
+  // 2️⃣ Handle message status updates (sent, delivered, read)
+  const statuses = change.statuses;
+  if (statuses && statuses.length > 0) {
+    statuses.forEach(status => {
+      console.log(`📦 Message Status -> ID: ${status.id}, To: ${status.recipient_id}, Status: ${status.status}, Timestamp: ${status.timestamp}`);
+      // Update global messageStatus object
+      messageStatus[status.id] = { to: status.recipient_id, status: status.status, timestamp: status.timestamp };
+    });
   }
 
   res.sendStatus(200);
 });
+
 
 // Webhook GET verification
 app.get("/webhook", (req,res)=>{
