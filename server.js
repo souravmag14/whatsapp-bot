@@ -328,11 +328,18 @@ async function getChatGPTResponse(userMessage) {
   }
 }
 
-// --- Log incoming message statuses ---
-app.post("/webhook-status", async (req, res) => {
-  const entryValue = req.body.entry?.[0]?.changes[0]?.value;
-  const statuses = entryValue?.statuses;
+app.post("/webhook", async (req, res) => {
+  const change = req.body.entry?.[0]?.changes[0]?.value;
 
+  // --- Handle incoming text messages ---
+  const message = change?.messages?.[0];
+  if (message?.type === "text") {
+    console.log(`📨 Message received from ${message.from}: ${message.text.body}`);
+    // your existing message processing code...
+  }
+
+  // --- Log incoming message statuses ---
+  const statuses = change?.statuses;
   if (statuses && statuses.length > 0) {
     statuses.forEach(status => {
       console.log(`📦 Message Status -> ID: ${status.id}, To: ${status.recipient_id}, Status: ${status.status}, Timestamp: ${status.timestamp}`);
