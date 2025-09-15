@@ -153,26 +153,22 @@ async function handleReplyOne(change, state) {
             messageStatus[sentMsg.data.messages[0].id] = { status: "sent", to: message?.from };
           }
 
-        } catch (error) {
-          await axios.post(
-            `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-            { messaging_product: "whatsapp", to: message?.from, text: { body: `❌ Error: Maximum renewal reached. Return the book.` }, context: { message_id: message?.id } },
-            { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` }, httpsAgent: new https.Agent({ rejectUnauthorized: false }) }
-          );
-        }
-      } else {
-        await axios.post(
-          `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-          { messaging_product: "whatsapp", to: message?.from, text: { body: `❌ Invalid serial number. Type *exit* to return.` }, context: { message_id: message?.id } },
-          { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` }, httpsAgent: new https.Agent({ rejectUnauthorized: false }) }
-        );
-      }
-      state.awaitingIssueId = false;
-    }
-  } catch (error) {
-    console.error("Error handleReplyOne:", error.response?.data || error.message);
-  }
+        } } catch (error) {
+  const errMsg = error.response?.data?.error || error.message || "Unknown error";
+  console.error("Koha Renewal Error:", errMsg);
+
+  await axios.post(
+    `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
+    { 
+      messaging_product: "whatsapp", 
+      to: message?.from, 
+      text: { body: `❌ Renewal failed: ${errMsg}` }, 
+      context: { message_id: message?.id } 
+    },
+    { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` }, httpsAgent: new https.Agent({ rejectUnauthorized: false }) }
+  );
 }
+
 
 // Handle static options 2–6
 async function handleStaticMessage(change, option, state) {
