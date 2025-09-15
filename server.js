@@ -132,7 +132,7 @@ async function handleReplyOne(change, state) {
         const selectedBook = state.booksCheckedOut[index];
         const issueId = selectedBook[10] || 'Unknown';
         const bookTitle = selectedBook[5] || 'Unknown';
-        const url = `https://ysmranchi-staff.kohacloud.in/api/v1/checkouts/${issueId}/renewals`;
+        const url = `https://ysmranchi-staff.kohacloud.in/api/v1/checkouts/${issueId}/renewal`;
 
         try {
           const response = await axios.post(url, {}, {
