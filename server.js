@@ -54,7 +54,7 @@ async function fetchCheckOutHistoryReport() {
   try {
     const agent = new https.Agent({ rejectUnauthorized: false });
     const response = await axios.get(
-      'https://ysmranchi-opac.kohacloud.in/cgi-bin/koha/svc/report?id=94',
+      "https://ysmranchi-opac.kohacloud.in/cgi-bin/koha/svc/report?id=94",
       { httpsAgent: agent }
     );
 
@@ -77,25 +77,32 @@ async function handleReplyOne(change, state) {
 
     if (!state.awaitingIssueId) {
       const reportResults = await fetchCheckOutHistoryReport();
-      const phoneNumber = senderPhoneNumber.replace(/^91/, '');
-      state.booksCheckedOut = reportResults.filter(record => record[3] === phoneNumber);
+      const phoneNumber = senderPhoneNumber.replace(/^91/, "");
+      state.booksCheckedOut = reportResults.filter(
+        (record) => record[3] === phoneNumber
+      );
 
       if (state.booksCheckedOut.length > 0) {
         let body = `Dear ${senderName},\n\n📔 Your checked-out books:\n\n`;
         state.booksCheckedOut.forEach((record, i) => {
-          const dueDate = record[0] || 'Unknown';
-          const authorName = record[6] || 'Unknown';
-          const bookTitle = record[5] || 'Unknown';
-          const barcode = record[8] || 'Unknown';
-          const issueId = record[10] || 'Unknown';
-          const dueDays = moment(dueDate, "YYYY-MM-DD").diff(moment(), 'days');
-          body += `\n\📖 *${i+1}. ${bookTitle}*\n   *Author:* ${authorName}\n   *Due:* ${dueDate} (${dueDays} Days)\n   *Barcode:* ${barcode}\n   *Issue ID:* ${issueId}\n`;
+          const dueDate = record[0] || "Unknown";
+          const authorName = record[6] || "Unknown";
+          const bookTitle = record[5] || "Unknown";
+          const barcode = record[8] || "Unknown";
+          const issueId = record[10] || "Unknown";
+          const dueDays = moment(dueDate, "YYYY-MM-DD").diff(moment(), "days");
+          body += `\n📖 *${i + 1}. ${bookTitle}*\n   *Author:* ${authorName}\n   *Due:* ${dueDate} (${dueDays} Days)\n   *Barcode:* ${barcode}\n   *Issue ID:* ${issueId}\n`;
         });
         body += `\n🚨 Reply with *exit* to return to the main menu or serial number to renew.`;
 
         await axios.post(
           `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-          { messaging_product: "whatsapp", to: message.from, text: { body }, context: { message_id: message.id } },
+          {
+            messaging_product: "whatsapp",
+            to: message.from,
+            text: { body },
+            context: { message_id: message.id },
+          },
           { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
         );
 
@@ -106,62 +113,97 @@ async function handleReplyOne(change, state) {
           {
             messaging_product: "whatsapp",
             to: message.from,
-            text: { body: `No check-out history found for ${senderName}. Please visit the library or update your WhatsApp number.` },
-            context: { message_id: message.id }
+            text: {
+              body: `No check-out history found for ${senderName}. Please visit the library or update your WhatsApp number.`,
+            },
+            context: { message_id: message.id },
           },
           { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
         );
       }
     } else {
       const userReply = message.text.body.trim();
+
+      // ✅ Catch exit early
+      if (userReply.toLowerCase() === "exit") {
+        state.awaitingIssueId = false;
+        await sendInitialMessage(change, state);
+        return;
+      }
+
       const index = parseInt(userReply) - 1;
       if (index >= 0 && index < state.booksCheckedOut.length) {
         const selectedBook = state.booksCheckedOut[index];
-        const issueId = selectedBook[10] || 'Unknown';
-        const bookTitle = selectedBook[5] || 'Unknown';
-        const barcode = selectedBook[8] || 'Unknown';
+        const issueId = selectedBook[10] || "Unknown";
+        const bookTitle = selectedBook[5] || "Unknown";
+        const barcode = selectedBook[8] || "Unknown";
 
-        const domain = 'https://ysmranchi-staff.kohacloud.in';
-        const username = 'souravnag';
-        const password = '@Yss132989';
+        const domain = "https://ysmranchi-staff.kohacloud.in";
+        const username = "souravnag";
+        const password = "@Yss132989";
         const url = `${domain}/api/v1/checkouts/${issueId}/renewals`;
 
         try {
-          const response = await axios.post(url, {}, {
-            headers: { 'Authorization': 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64') },
-            httpsAgent: new https.Agent({ rejectUnauthorized: false })
-          });
+          const response = await axios.post(
+            url,
+            {},
+            {
+              headers: {
+                Authorization:
+                  "Basic " +
+                  Buffer.from(`${username}:${password}`).toString("base64"),
+              },
+              httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+            }
+          );
 
           const newDueDate = response.data.due_date;
           const successMessage = `Success! 🎉\n📚 "${bookTitle}" renewed.\nNew due: *${newDueDate}*\nType *exit* to return to menu.`;
 
           await axios.post(
             `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-            { messaging_product: "whatsapp", to: message.from, text: { body: successMessage }, context: { message_id: message.id } },
+            {
+              messaging_product: "whatsapp",
+              to: message.from,
+              text: { body: successMessage },
+              context: { message_id: message.id },
+            },
             { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
           );
-
         } catch (error) {
           await axios.post(
             `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-            { messaging_product: "whatsapp", to: message.from, text: { body: `❌ Error: Maximum renewal reached. Return the book.` }, context: { message_id: message.id } },
+            {
+              messaging_product: "whatsapp",
+              to: message.from,
+              text: {
+                body: `❌ Error: Maximum renewal reached. Return the book.`,
+              },
+              context: { message_id: message.id },
+            },
             { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
           );
         }
-
       } else {
         await axios.post(
           `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-          { messaging_product: "whatsapp", to: message.from, text: { body: `❌ Invalid serial number. Type *exit* to return.` }, context: { message_id: message.id } },
+          {
+            messaging_product: "whatsapp",
+            to: message.from,
+            text: {
+              body: `❌ Invalid serial number. Type *exit* to return.`,
+            },
+            context: { message_id: message.id },
+          },
           { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
         );
       }
-
-      state.awaitingIssueId = false;
     }
-
   } catch (error) {
-    console.error("Error handleReplyOne:", error.response?.data || error.message);
+    console.error(
+      "Error handleReplyOne:",
+      error.response?.data || error.message
+    );
   }
 }
 
@@ -172,11 +214,19 @@ async function handleStaticMessage(change, option, state) {
   const businessPhoneNumberId = change.metadata.phone_number_id;
 
   let responseMessage = "Invalid option";
-  switch(option){
-    case "2": responseMessage = `🌏 Repository: https://library.ysmranchi.net/dspace`; break;
-    case "3": responseMessage = `🌏 Newspaper Archive: https://ysmcentallibrary.infinityfreeapp.com/result.php`; break;
-    case "4": responseMessage = `🌏 Subject Catalogue: https://library.ysmranchi.net/catalouge/book.php`; break;
-    case "5": responseMessage = `🌏 Update Mobile Number: https://library.ysmranchi.net/update/index.php`; break;
+  switch (option) {
+    case "2":
+      responseMessage = `🌏 Repository: https://library.ysmranchi.net/dspace`;
+      break;
+    case "3":
+      responseMessage = `🌏 Newspaper Archive: https://ysmcentallibrary.infinityfreeapp.com/result.php`;
+      break;
+    case "4":
+      responseMessage = `🌏 Subject Catalogue: https://library.ysmranchi.net/catalouge/book.php`;
+      break;
+    case "5":
+      responseMessage = `🌏 Update Mobile Number: https://library.ysmranchi.net/update/index.php`;
+      break;
     case "6":
       responseMessage = `📝 Learning Mode. Type your questions. Type *exit* to return.`;
       state.awaitingUserQuestion = true;
@@ -186,50 +236,67 @@ async function handleStaticMessage(change, option, state) {
   try {
     await axios.post(
       `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-      { messaging_product: "whatsapp", to: message.from, text: { body: responseMessage }, context: { message_id: message.id } },
+      {
+        messaging_product: "whatsapp",
+        to: message.from,
+        text: { body: responseMessage },
+        context: { message_id: message.id },
+      },
       { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
     );
-  } catch(e){
-    console.error("Error handleStaticMessage:", e.response?.data || e.message);
+  } catch (e) {
+    console.error(
+      "Error handleStaticMessage:",
+      e.response?.data || e.message
+    );
   }
 }
 
 // ChatGPT response
-async function getChatGPTResponse(userMessage){
-  try{
-    const response = await axios.post("https://api.openai.com/v1/chat/completions",
-      { model: "gpt-3.5-turbo", messages: [{ role: "user", content: userMessage }] },
-      { headers: { Authorization: `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" } }
+async function getChatGPTResponse(userMessage) {
+  try {
+    const response = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-3.5-turbo",
+        messages: [{ role: "user", content: userMessage }],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
     );
 
     let chatGPTResponse = response.data.choices[0].message.content;
     chatGPTResponse = `💬 ${chatGPTResponse}\n\n🚪 Type *exit* to close chat session.\n*Designed by Central Library*`;
     return chatGPTResponse;
-  } catch(e){
+  } catch (e) {
     console.error("Error ChatGPT:", e.response?.data || e.message);
     return "Sorry, I couldn't process your request.";
   }
 }
 
 // Webhook POST
-app.post("/webhook", async (req,res)=>{
+app.post("/webhook", async (req, res) => {
   const change = req.body.entry?.[0]?.changes[0]?.value;
-  if(!change) return res.sendStatus(200);
+  if (!change) return res.sendStatus(200);
 
   const message = change.messages?.[0];
-  if(!message) return res.sendStatus(200);
+  if (!message) return res.sendStatus(200);
 
   const senderPhoneNumber = change.contacts[0]?.wa_id;
   const state = getUserState(senderPhoneNumber);
 
   try {
-    if(!state.initialMessageSent){
+    if (!state.initialMessageSent) {
       await sendInitialMessage(change, state);
-    } else if(state.awaitingIssueId || message.text.body.trim() === "1"){
+    } else if (state.awaitingIssueId || message.text.body.trim() === "1") {
       await handleReplyOne(change, state);
-    } else if(state.awaitingUserQuestion){
+    } else if (state.awaitingUserQuestion) {
       const userQuestion = message.text.body.trim();
-      if(userQuestion.toLowerCase() === "exit"){
+      if (userQuestion.toLowerCase() === "exit") {
         state.awaitingUserQuestion = false;
         await sendInitialMessage(change, state);
       } else {
@@ -237,11 +304,16 @@ app.post("/webhook", async (req,res)=>{
         const businessPhoneNumberId = change.metadata.phone_number_id;
         await axios.post(
           `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-          { messaging_product: "whatsapp", to: message.from, text: { body: chatGPTResponse }, context: { message_id: message.id } },
+          {
+            messaging_product: "whatsapp",
+            to: message.from,
+            text: { body: chatGPTResponse },
+            context: { message_id: message.id },
+          },
           { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
         );
       }
-    } else if(["2","3","4","5","6"].includes(message.text.body.trim())){
+    } else if (["2", "3", "4", "5", "6"].includes(message.text.body.trim())) {
       await handleStaticMessage(change, message.text.body.trim(), state);
     } else {
       await sendInitialMessage(change, state);
@@ -251,11 +323,14 @@ app.post("/webhook", async (req,res)=>{
     const businessPhoneNumberId = change.metadata.phone_number_id;
     await axios.post(
       `https://graph.facebook.com/v18.0/${businessPhoneNumberId}/messages`,
-      { messaging_product: "whatsapp", status: "read", message_id: message.id },
+      {
+        messaging_product: "whatsapp",
+        status: "read",
+        message_id: message.id,
+      },
       { headers: { Authorization: `Bearer ${GRAPH_API_TOKEN}` } }
     );
-
-  } catch(e){
+  } catch (e) {
     console.error("Webhook processing error:", e.response?.data || e.message);
   }
 
@@ -263,19 +338,19 @@ app.post("/webhook", async (req,res)=>{
 });
 
 // Webhook GET verification
-app.get("/webhook", (req,res)=>{
+app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if(mode === "subscribe" && token === WEBHOOK_VERIFY_TOKEN){
+  if (mode === "subscribe" && token === WEBHOOK_VERIFY_TOKEN) {
     res.status(200).send(challenge);
     console.log("Webhook verified!");
   } else res.sendStatus(403);
 });
 
-app.get("/", (req,res)=>{
-  res.send(`<pre>Received Data:\n${JSON.stringify(userState,null,2)}</pre>`);
+app.get("/", (req, res) => {
+  res.send(`<pre>Received Data:\n${JSON.stringify(userState, null, 2)}</pre>`);
 });
 
-app.listen(PORT, ()=>console.log(`Server listening on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
